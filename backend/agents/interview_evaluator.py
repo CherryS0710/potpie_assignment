@@ -1,10 +1,13 @@
 import os
+import logging
 from typing import Optional
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from schemas.evaluation import EvaluationResponse
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -92,20 +95,20 @@ async def evaluate_interview_answer(
 **Candidate's Answer:**
 {answer}
 
-**Your Task:**
+**Your Task - You MUST complete ALL of these:**
 1. Evaluate this answer on clarity, relevance, specificity, completeness, professionalism, and technical accuracy (if applicable)
 2. Assign an overall_score from 0-10 (be fair - an answer that addresses the question should score at least 4-5)
-3. List 2-4 specific strengths
-4. List 2-4 specific areas for improvement
-5. Provide 3-5 actionable improvement tips
-6. Write a complete improved version of the answer that is significantly better, with:
+3. List 2-4 specific strengths - REQUIRED: Must have at least 2 strengths. Examples: "Clear communication", "Addresses the question directly", "Shows relevant knowledge"
+4. List 2-4 specific areas for improvement - REQUIRED: Must have at least 2 weaknesses. Examples: "Lacks concrete examples", "Could be more structured"
+5. Provide 3-5 actionable improvement tips - REQUIRED: Must have at least 3 tips. Examples: "Add specific examples using the STAR method", "Improve opening statement"
+6. Write a complete improved version of the answer that is significantly better than the original - REQUIRED: Must be a full, complete answer (not empty or placeholder). Include:
    - Better structure and clarity
-   - Concrete examples and specifics
+   - Concrete examples and specifics where relevant
    - More complete information
    - Professional tone
    - Technical accuracy (if applicable)
 
-Be thorough and constructive in your evaluation and improvement."""
+CRITICAL: Every field must be filled with actual content. Never leave arrays empty or use placeholder text."""
         )
         
         # Validate the output before returning
@@ -117,22 +120,33 @@ Be thorough and constructive in your evaluation and improvement."""
         if not isinstance(output.overall_score, (int, float)) or output.overall_score < 0 or output.overall_score > 10:
             raise ValueError(f"Invalid overall_score: {output.overall_score}")
         
+        # Ensure lists are not empty, with fallback defaults
         if not output.strengths or len(output.strengths) == 0:
-            raise ValueError("Strengths list is empty")
+            logger.warning("Strengths list is empty, using default")
+            output.strengths = ["The answer addresses the question asked"]
+        
+        # Filter out any empty strings from lists
+        output.strengths = [s for s in output.strengths if s and s.strip()]
+        output.weaknesses = [w for w in output.weaknesses if w and w.strip()] if output.weaknesses else []
+        output.improvement_tips = [t for t in output.improvement_tips if t and t.strip()] if output.improvement_tips else []
+        
+        if len(output.strengths) == 0:
+            output.strengths = ["The answer addresses the question asked"]
         
         if not output.weaknesses or len(output.weaknesses) == 0:
-            raise ValueError("Weaknesses list is empty")
+            logger.warning("Weaknesses list is empty, using default")
+            output.weaknesses = ["Could benefit from more specific examples or details"]
         
         if not output.improvement_tips or len(output.improvement_tips) == 0:
-            raise ValueError("Improvement tips list is empty")
+            logger.warning("Improvement tips list is empty, using default")
+            output.improvement_tips = ["Add more specific examples", "Improve clarity and structure"]
         
         if not output.improved_answer or len(output.improved_answer.strip()) == 0:
-            raise ValueError("Improved answer is empty")
+            logger.warning("Improved answer is empty, using original answer as fallback")
+            output.improved_answer = answer
         
         return output
     except Exception as e:
         # Log the error for debugging
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Evaluation error: {str(e)}", exc_info=True)
         raise ValueError(f"Evaluation failed: {str(e)}")

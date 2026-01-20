@@ -31,27 +31,35 @@ model = OpenAIModel(
 # Create the agent with structured output
 evaluator_agent = Agent(
     model=model,
-    system_prompt="""You are an expert interview coach specializing in evaluating interview answers 
-and providing constructive feedback. Your role is to analyze interview responses with precision and 
-provide structured, actionable feedback that helps candidates improve.
+    system_prompt="""You are an expert interview coach and hiring manager with 15+ years of experience evaluating candidates. 
+Your task is to analyze interview answers and provide detailed, constructive feedback.
 
-Evaluation Criteria:
-1. **Clarity**: Is the answer clear, well-structured, and easy to follow?
-2. **Relevance**: Does the answer directly address the question asked?
-3. **Specificity**: Does the answer include concrete examples, numbers, or details?
-4. **Confidence**: Does the answer demonstrate confidence without arrogance?
-5. **Completeness**: Does the answer fully address all aspects of the question?
-6. **Professionalism**: Is the tone appropriate for an interview setting?
+SCORING GUIDELINES (0-10 scale):
+- 9-10: Exceptional - Comprehensive, specific, well-structured, with concrete examples
+- 7-8: Good - Solid answer with most criteria met, minor improvements needed
+- 5-6: Average - Adequate but missing key elements, needs significant improvement
+- 3-4: Below Average - Incomplete, vague, or missing critical information
+- 0-2: Poor - Does not address the question, completely incorrect, or inappropriate
 
-When providing feedback:
-- Be constructive and encouraging
-- Focus on actionable improvements
-- Highlight what was done well
-- Provide specific, measurable improvement suggestions
-- Generate an improved version that incorporates best practices
+EVALUATION CRITERIA:
+1. Clarity: Is the answer clear, well-structured, and easy to follow? (0-10 weight: 1.5)
+2. Relevance: Does it directly address the question asked? (0-10 weight: 2.0)
+3. Specificity: Does it include concrete examples, numbers, details, or technical accuracy? (0-10 weight: 2.0)
+4. Completeness: Does it fully address all aspects of the question? (0-10 weight: 1.5)
+5. Professionalism: Is the tone appropriate and demonstrates communication skills? (0-10 weight: 1.0)
+6. Technical/Job Fit: For technical roles, is the answer technically accurate? (0-10 weight: 2.0)
 
-Always return structured output with a numerical score (0-10), lists of strengths and weaknesses, 
-improvement tips, and a refined answer.""",
+INSTRUCTIONS:
+- Calculate overall_score as a weighted average considering all criteria
+- For strengths: Identify 2-4 specific things the candidate did well
+- For weaknesses: Identify 2-4 specific areas that need improvement (be constructive)
+- For improvement_tips: Provide 3-5 actionable, specific suggestions
+- For improved_answer: Write a complete, enhanced version that incorporates best practices, 
+  adds concrete examples where relevant, improves structure, and addresses any gaps
+- Be fair and encouraging - even average answers should score at least 4-5 if they address the question
+- The improved_answer should be significantly better, not just a minor edit
+
+CRITICAL: You must return valid data for ALL fields. Never return empty arrays or placeholder text.""",
     output_type=EvaluationResponse,
 )
 
@@ -73,17 +81,58 @@ async def evaluate_interview_answer(
     """
     try:
         result = await evaluator_agent.run(
-            f"""Interview Question: {question}
-            
-Job Role: {job_role}
+            f"""You are evaluating an interview answer. Please provide a comprehensive evaluation.
 
-Candidate's Answer: {answer}
+**Interview Question:**
+{question}
 
-Please evaluate this answer based on clarity, relevance, specificity, confidence, completeness, 
-and professionalism. Provide a numerical score (0-10), identify strengths and weaknesses, 
-offer improvement tips, and generate a refined version of the answer."""
+**Job Role Being Interviewed For:**
+{job_role}
+
+**Candidate's Answer:**
+{answer}
+
+**Your Task:**
+1. Evaluate this answer on clarity, relevance, specificity, completeness, professionalism, and technical accuracy (if applicable)
+2. Assign an overall_score from 0-10 (be fair - an answer that addresses the question should score at least 4-5)
+3. List 2-4 specific strengths
+4. List 2-4 specific areas for improvement
+5. Provide 3-5 actionable improvement tips
+6. Write a complete improved version of the answer that is significantly better, with:
+   - Better structure and clarity
+   - Concrete examples and specifics
+   - More complete information
+   - Professional tone
+   - Technical accuracy (if applicable)
+
+Be thorough and constructive in your evaluation and improvement."""
         )
-        return result.output
+        
+        # Validate the output before returning
+        output = result.output
+        if not output:
+            raise ValueError("Agent returned empty output")
+        
+        # Ensure all required fields are present and valid
+        if not isinstance(output.overall_score, (int, float)) or output.overall_score < 0 or output.overall_score > 10:
+            raise ValueError(f"Invalid overall_score: {output.overall_score}")
+        
+        if not output.strengths or len(output.strengths) == 0:
+            raise ValueError("Strengths list is empty")
+        
+        if not output.weaknesses or len(output.weaknesses) == 0:
+            raise ValueError("Weaknesses list is empty")
+        
+        if not output.improvement_tips or len(output.improvement_tips) == 0:
+            raise ValueError("Improvement tips list is empty")
+        
+        if not output.improved_answer or len(output.improved_answer.strip()) == 0:
+            raise ValueError("Improved answer is empty")
+        
+        return output
     except Exception as e:
-        # Fallback: Return a basic response if agent fails
+        # Log the error for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Evaluation error: {str(e)}", exc_info=True)
         raise ValueError(f"Evaluation failed: {str(e)}")

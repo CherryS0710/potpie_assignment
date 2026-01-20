@@ -83,7 +83,7 @@ Please evaluate this answer based on clarity, relevance, specificity, confidence
 and professionalism. Provide a numerical score (0-10), identify strengths and weaknesses, 
 offer improvement tips, and generate a refined version of the answer."""
         )
-        return result.data
+        return result.output
     except Exception as e:
         # Fallback: Return a basic response if agent fails
         raise ValueError(f"Evaluation failed: {str(e)}")

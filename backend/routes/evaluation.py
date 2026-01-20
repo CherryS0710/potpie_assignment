@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from schemas.evaluation import EvaluationRequest, EvaluationResponse
 from agents.interview_evaluator import evaluate_interview_answer
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 router = APIRouter()
 

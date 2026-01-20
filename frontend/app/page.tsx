@@ -24,6 +24,8 @@ export default function Home() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      console.log('Calling API:', `${apiUrl}/api/evaluate`)
+      
       const response = await fetch(`${apiUrl}/api/evaluate`, {
         method: 'POST',
         headers: {
@@ -36,14 +38,37 @@ export default function Home() {
         }),
       })
 
+      console.log('Response status:', response.status, response.statusText)
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Failed to evaluate answer' }))
+        console.error('API Error:', errorData)
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('API Response:', data)
+      
+      // Validate the response structure
+      if (!data.overall_score && data.overall_score !== 0) {
+        throw new Error('Invalid response format: missing overall_score')
+      }
+      if (!Array.isArray(data.strengths)) {
+        throw new Error('Invalid response format: strengths must be an array')
+      }
+      if (!Array.isArray(data.weaknesses)) {
+        throw new Error('Invalid response format: weaknesses must be an array')
+      }
+      if (!Array.isArray(data.improvement_tips)) {
+        throw new Error('Invalid response format: improvement_tips must be an array')
+      }
+      if (!data.improved_answer) {
+        throw new Error('Invalid response format: missing improved_answer')
+      }
+      
       setResults(data)
     } catch (err) {
+      console.error('Evaluation error:', err)
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
       setLoading(false)
